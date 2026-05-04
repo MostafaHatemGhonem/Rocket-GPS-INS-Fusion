@@ -1,31 +1,34 @@
-"""
-Real-time Visualization with PyQtGraph
-Assigned to: Alaa
-"""
-
 import pyqtgraph as pg
-from PyQt5 import QtWidgets, QtCore
+from pyqtgraph.Qt import QtCore, QtWidgets
+import collections
+import queue
 import sys
 
-class Visualizer(QtWidgets.QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Rocket GPS-INS Fusion Visualizer")
+class Visualizer:
+    def __init__(self, ui_queue: queue.Queue):
+        # TODO: Alaa - This is your playground!
+        # Your objective:
+        # 1. Setup a PyQtGraph window and plot.
+        # 2. Use a QTimer to periodically pull data from 'self.ui_queue'.
+        # 3. Update the plot curves with the incoming data.
+        # Data format in the queue: (timestamp_ms, gps_alt, ins_alt, kalman_alt)
         
-        self.graphWidget = pg.PlotWidget()
-        self.setCentralWidget(self.graphWidget)
-        
-        self.x = list(range(100))
-        self.y = [0] * 100
-        self.data_line = self.graphWidget.plot(self.x, self.y)
-        
-    def update_plot(self, new_data):
-        self.y = self.y[1:]
-        self.y.append(new_data)
-        self.data_line.setData(self.x, self.y)
+        self.ui_queue = ui_queue
+        print("Visualizer Initialized. Alaa, it's your turn to build the GUI!")
+
+    def run(self):
+        """
+        This method is called from main.py to start the GUI event loop.
+        """
+        # TODO: Alaa - Initialize your QApplication and start the event loop here.
+        # Example: 
+        # self.app = QtWidgets.QApplication(sys.argv)
+        # ... your code ...
+        # sys.exit(self.app.exec_())
+        pass
 
 if __name__ == "__main__":
-    app = QtWidgets.QApplication(sys.argv)
-    v = Visualizer()
-    v.show()
-    sys.exit(app.exec_())
+    # You can test your visualizer independently here
+    q = queue.Queue()
+    v = Visualizer(q)
+    v.run()

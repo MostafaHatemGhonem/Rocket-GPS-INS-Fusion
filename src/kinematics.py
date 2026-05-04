@@ -7,13 +7,15 @@ import numpy as np
 
 class Kinematics:
     def __init__(self):
-        self.position = np.zeros(3)
-        self.velocity = np.zeros(3)
-        self.orientation = np.zeros(3)
+        # TODO: Mariam - Initialize your state variables here
+        self.altitude = 0.0
+        self.velocity = 0.0
 
-    def integrate_imu(self, accel, gyro, dt):
+    def integrate(self, accel_z, dt):
         """
-        Integrate IMU data to update position, velocity, and orientation.
+        Integrate vertical acceleration to update altitude and velocity.
         """
-        # Placeholder for integration logic
-        pass
+        # TODO: Mariam - Implement your integration logic here (e.g., Euler or RK4)
+        # Remember to handle gravity compensation!
+        
+        return self.altitude, self.velocity
