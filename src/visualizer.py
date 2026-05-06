@@ -1,4 +1,5 @@
 import sys
+import threading
 
 import queue
 from collections import deque
@@ -63,16 +64,12 @@ class Visualizer(QMainWindow):
         self.timer.start(30)
 
     def update_plot(self):
-        new_date = False
+        new_data = False
         # سحب البيانات من طابور مصطفى بدون تعديل في المنطق
         while not self.ui_queue.empty():
             try:
                 t, gps, ins, kal = self.ui_queue.get_nowait()
 
-                #ال print بطبيعته بطئ فممكن ياخر في معالجه الداتا 
-                # print(f"Data from mostafa -> GPS : {gps} ,INS :{ins} , Kelman : {kal}")
-               
-                
                 # إرجاع t للثواني
                 self.times.append(t / 1000.0)
                 self.gps_vals.append(gps)
@@ -81,24 +78,39 @@ class Visualizer(QMainWindow):
     
                 new_data = True
                 
-                # الحفاظ على آخر 200 نقطة للأداء
-                # if len(self.times) > 200:
-                #     self.times.pop(0)
-                #     self.gps_vals.pop(0)
-                #     self.ins_vals.pop(0)
-                #     self.kal_vals.pop(0)
             except queue.Empty:
                 break
             except Exception as e:
-                print(f"Error parsing date: {e}")
+                print(f"Error parsing data: {e}")
                 break
 
         # تحديث الرسم
-        if new_date and len(self.item) > 0:
-            self.ins_line.setData(self.times, self.ins_vals)
-            self.gps_line.setData(self.times, self.gps_vals)
-            self.kal_line.setData(self.times, self.kal_vals)
+        if new_data and len(self.times) > 0:
+            self.ins_line.setData(list(self.times), list(self.ins_vals))
+            self.gps_line.setData(list(self.times), list(self.gps_vals))
+            self.kal_line.setData(list(self.times), list(self.kal_vals))
 
     def run(self):
         self.show()
         sys.exit(app.exec_())
+
+if __name__ == "__main__":
+    import random
+    import time
+    
+    q = queue.Queue()
+    
+    def produce_mock_data():
+        start_time = time.time() * 1000
+        while True:
+            t = time.time() * 1000 - start_time
+            gps = 100 + random.uniform(-1, 1)
+            ins = 100 + random.uniform(-2, 2)
+            kal = 100 + random.uniform(-0.5, 0.5)
+            q.put((t, gps, ins, kal))
+            time.sleep(0.05)
+
+    threading.Thread(target=produce_mock_data, daemon=True).start()
+    
+    vis = Visualizer(q)
+    vis.run()
