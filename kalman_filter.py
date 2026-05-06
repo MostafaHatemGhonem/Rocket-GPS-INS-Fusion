@@ -14,17 +14,28 @@ class KalmanFilter:
         self.I = np.eye(3)
 
         # Measurement matrix (GPS: altitude + velocity)
+        # self.H = np.array([
+        #     [1, 0, 0],
+        #     [0, 1, 0]
+        # ])
+
+        # # Measurement noise (GPS) ***
+        # self.R = np.array([
+        #     [15.0, 0],
+        #     [0, 5.0]
+        # ])
+
+        # Measurement matrix (GPS: Altitude ONLY)
         self.H = np.array([
-            [1, 0, 0],
-            [0, 1, 0]
+            [1,0,0]
         ])
 
-        # Measurement noise (GPS) ***
+        # Measurement noise (GPS Altitude uncertainty)
         self.R = np.array([
-            [15.0, 0],
-            [0, 5.0]
+            [15.0]    
         ])
-
+        
+        
         # Initialize dynamic matrices
         self._update_matrices()
 
@@ -46,14 +57,17 @@ class KalmanFilter:
         ])
 
         # Process noise (INS uncertainty) ***
-        self.Q = np.array([
+        base_Q = np.array([
             [1e-4, 0, 0],
             [0, 1e-3, 0],
             [0, 0, 1e-6]
         ])
 
+        self.Q = base_Q * dt
+        
+        
     def set_dt(self, dt):
-        """Update timestep dynamically"""
+        """Update timestep dynamically and recalculate matrices"""
         self.dt = dt
         self._update_matrices()
 
@@ -63,7 +77,7 @@ class KalmanFilter:
         self.P = self.F @ self.P @ self.F.T + self.Q
 
     def update(self, measurement):
-        """Update step using GPS measurement [altitude, velocity]"""
+        """Update step using GPS measurement [altitude] """
         z = np.array(measurement).reshape(-1, 1)
 
         y = z - self.H @ self.x
