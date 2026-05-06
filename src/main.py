@@ -119,7 +119,7 @@ class DataProcessor:
         self.data_queue = data_queue
         self.ui_queue = ui_queue
         self.kinematics = Kinematics()
-        self.kf = KalmanFilter(state_dim=3, obs_dim=2)
+        self.kf = KalmanFilter(dt=0.01)
         self.running = False
         self.last_timestamp = None
         
@@ -159,11 +159,11 @@ class DataProcessor:
                 ins_alt, ins_vel = self.kinematics.integrate(data.accel_z, dt)
                 
                 # 2. Kalman Filter (Tasneem)
-                self.kf.update_dt(dt)
-                self.kf.predict(u=data.accel_z)
+                self.kf.set_dt(dt)
+                self.kf.predict(data.accel_z)
                 
                 if data.gps_updated:
-                    self.kf.update(np.array([data.gps_alt, data.gps_vel]))
+                    self.kf.update([data.gps_alt])  # GPS: altitude only
                 
                 state = self.kf.get_state()
                 kalman_alt = state[0]
