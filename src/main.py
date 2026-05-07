@@ -12,13 +12,16 @@ import serial
 import struct
 import sys
 import numpy as np
+import csv
+from datetime import datetime
+
 from data_types import SensorData
 from kinematics import Kinematics
 from kalman_filter import KalmanFilter
 from visualizer import Visualizer
 
 class SerialManager:
-    def __init__(self, port='/dev/ttyACM0', baudrate=500000, mock=False):
+    def __init__(self, port='COM3', baudrate=500000, mock=False):
         self.port = port
         self.baudrate = baudrate
         self.mock = mock
@@ -26,7 +29,7 @@ class SerialManager:
         self.data_queue = queue.Queue(maxsize=1000)
         self.ser = None
         
-        # Struct format matching C++ (Omar): 
+        # Struct format perfectly matching the updated C++ Arduino code
         # Header(uint16), Timestamp(uint32), Accel_X/Y/Z(float), GPS_Alt/Vel(float), GPS_Flag(uint8)
         self.struct_format = '<HIfffffB'
         self.packet_size = struct.calcsize(self.struct_format)
@@ -111,9 +114,6 @@ class SerialManager:
                 self.data_queue.put(data)
             time.sleep(0.01)
 
-import csv
-from datetime import datetime
-
 class DataProcessor:
     def __init__(self, data_queue, ui_queue):
         self.data_queue = data_queue
@@ -127,7 +127,7 @@ class DataProcessor:
         filename = f"flight_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
         self.csv_file = open(filename, mode='w', newline='')
         self.csv_writer = csv.writer(self.csv_file)
-        self.csv_writer.writerow(['Timestamp_ms', 'Accel_Z', 'GPS_Alt_Raw', 'INS_Alt_Est', 'Kalman_Alt_Est'])
+        self.csv_writer.writerow(['Timestamp_ms', 'Accel_Z_Raw', 'GPS_Alt', 'INS_Alt_Est', 'Kalman_Alt_Est'])
 
     def start(self):
         self.running = True
@@ -147,6 +147,9 @@ class DataProcessor:
                 
                 if self.last_timestamp is None:
                     self.last_timestamp = data.timestamp
+                    # Initialize Kalman Filter state with the first valid GPS reading if available
+                    if data.gps_updated and data.gps_alt != 0.0:
+                         self.kf.x[0, 0] = data.gps_alt
                     continue
                 
                 dt = (data.timestamp - self.last_timestamp) / 1000.0
@@ -156,13 +159,18 @@ class DataProcessor:
                     dt = 0.01 
                 
                 # 1. Kinematics (Mariam)
-                ins_alt, ins_vel = self.kinematics.integrate(data.accel_z, dt)
+                # Mariam's module already subtracts 9.81 internally
+                # ✅ To this correct line:
+                ins_alt, ins_vel = self.kinematics.integrate(data.accel_x, data.accel_y, data.accel_z, dt)
                 
                 # 2. Kalman Filter (Tasneem)
                 self.kf.set_dt(dt)
-                self.kf.predict(data.accel_z)
                 
-                if data.gps_updated:
+                # *** CRITICAL FIX: Strip gravity before feeding to Kalman Filter ***
+                az_corrected = data.accel_z - 9.81 
+                self.kf.predict(az_corrected)
+                
+                if data.gps_updated and data.gps_alt != 0.0:
                     self.kf.update([data.gps_alt])  # GPS: altitude only
                 
                 state = self.kf.get_state()
@@ -183,7 +191,8 @@ class DataProcessor:
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Rocket GPS-INS Fusion System")
-    parser.add_argument("--port", default="COM3", help="Serial port")
+    # Change COM3 to COM4 right here:
+    parser.add_argument("--port", default="COM4", help="Serial port") 
     parser.add_argument("--mock", action="store_true", help="Run with mock data")
     args = parser.parse_args()
 
