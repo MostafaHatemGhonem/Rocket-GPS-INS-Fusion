@@ -11,6 +11,7 @@ import queue
 import serial
 import struct
 import sys
+import os
 import numpy as np
 import csv
 from datetime import datetime
@@ -123,9 +124,18 @@ class DataProcessor:
         self.running = False
         self.last_timestamp = None
         
+        # State management for GPS initialization
+        self.kf_initialized = False
+        self.last_print_time = time.time()
+        
         # Data Logging Setup
+        log_folder = "logs"
+        os.makedirs(log_folder, exist_ok=True)  # Creates the folder if it doesn't exist
+        
         filename = f"flight_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-        self.csv_file = open(filename, mode='w', newline='')
+        filepath = os.path.join(log_folder, filename) # Joins folder and filename safely
+        
+        self.csv_file = open(filepath, mode='w', newline='')
         self.csv_writer = csv.writer(self.csv_file)
         self.csv_writer.writerow(['Timestamp_ms', 'Accel_Z_Raw', 'GPS_Alt', 'INS_Alt_Est', 'Kalman_Alt_Est'])
 
@@ -147,9 +157,6 @@ class DataProcessor:
                 
                 if self.last_timestamp is None:
                     self.last_timestamp = data.timestamp
-                    # Initialize Kalman Filter state with the first valid GPS reading if available
-                    if data.gps_updated and data.gps_alt != 0.0:
-                         self.kf.x[0, 0] = data.gps_alt
                     continue
                 
                 dt = (data.timestamp - self.last_timestamp) / 1000.0
@@ -158,15 +165,37 @@ class DataProcessor:
                 if dt <= 0 or dt > 0.5:
                     dt = 0.01 
                 
-                # 1. Kinematics (Mariam)
-                # Mariam's module already subtracts 9.81 internally
-                # ✅ To this correct line:
+                # 1. ALWAYS run Kinematics (INS works without GPS)
                 ins_alt, ins_vel = self.kinematics.integrate(data.accel_x, data.accel_y, data.accel_z, dt)
                 
-                # 2. Kalman Filter (Tasneem)
+                # 2. Check if Kalman is initialized (Waiting for first GPS Lock)
+                if not self.kf_initialized:
+                    if data.gps_updated and data.gps_alt != 0.0:
+                        # We got our first valid GPS hit! Initialize the filter!
+                        self.kf.x[0, 0] = data.gps_alt
+                        self.kf_initialized = True
+                        print(f"\n[SUCCESS] GPS 3D Fix Acquired! Launchpad Altitude: {data.gps_alt}m")
+                        print("Kalman Filter is now ONLINE.\n")
+                    else:
+                        # Still waiting for GPS. Print message every 2.0 seconds.
+                        current_time = time.time()
+                        if current_time - self.last_print_time > 2.0:
+                            print("Waiting for GPS satellite lock... (INS is running)")
+                            self.last_print_time = current_time
+                        
+                        # Push data to UI and CSV (Kalman is flat at 0.0 until lock)
+                        if not self.ui_queue.full():
+                            self.ui_queue.put((data.timestamp, data.gps_alt, ins_alt, 0.0))
+                        self.csv_writer.writerow([data.timestamp, data.accel_z, data.gps_alt, ins_alt, 0.0])
+                        
+                        continue # Skip the Kalman Filter steps below until initialized!
+
+                # --- If the code reaches here, the Kalman Filter IS initialized ---
+                
+                # 3. Kalman Filter (Tasneem)
                 self.kf.set_dt(dt)
                 
-                # *** CRITICAL FIX: Strip gravity before feeding to Kalman Filter ***
+                # Strip gravity before feeding to Kalman Filter
                 az_corrected = data.accel_z - 9.81 
                 self.kf.predict(az_corrected)
                 
@@ -176,11 +205,11 @@ class DataProcessor:
                 state = self.kf.get_state()
                 kalman_alt = state[0]
                 
-                # 3. Push to UI Queue (Alaa)
+                # 4. Push to UI Queue (Alaa)
                 if not self.ui_queue.full():
                     self.ui_queue.put((data.timestamp, data.gps_alt, ins_alt, kalman_alt))
                 
-                # 4. Data Logging
+                # 5. Data Logging
                 self.csv_writer.writerow([data.timestamp, data.accel_z, data.gps_alt, ins_alt, kalman_alt])
                 
             except queue.Empty:
@@ -191,7 +220,6 @@ class DataProcessor:
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="Rocket GPS-INS Fusion System")
-    # Change COM3 to COM4 right here:
     parser.add_argument("--port", default="COM4", help="Serial port") 
     parser.add_argument("--mock", action="store_true", help="Run with mock data")
     args = parser.parse_args()
