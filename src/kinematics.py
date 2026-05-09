@@ -1,43 +1,34 @@
-"""
-Kinematics and INS Integration
-Assigned to: Mariam
-"""
-import numpy as np
-
 class Kinematics:
     def __init__(self):
-        """
-        Initialize the state variables for the CubeSat/Rocket.
-        """
-        # Position variables
         self.px = 0.0
         self.py = 0.0
-        self.altitude = 0.0  # pz
+        self.altitude = 0.0
         
-        # Velocity variables
         self.vx = 0.0
         self.vy = 0.0
-        self.velocity = 0.0  # vz
+        self.velocity = 0.0
+        
+        self.prev_ax = 0.0
+        self.prev_ay = 0.0
+        self.prev_az_corrected = 0.0
 
     def integrate(self, ax, ay, az, dt):
-        """
-        Numerical integration using Euler method to update 
-        velocity and position based on acceleration data.
-        """
-        
-        # 1. Gravity Compensation
-        # Adjust vertical acceleration to remove the effect of Earth's gravity
         az_corrected = az - 9.81
 
-        # 2. Update Velocities (v = v0 + a * dt)
-        self.vx += ax * dt
-        self.vy += ay * dt
-        self.velocity += az_corrected * dt
+        prev_vx = self.vx
+        prev_vy = self.vy
+        prev_vz = self.velocity
 
-        # 3. Update Positions (p = p0 + v * dt)
-        self.px += self.vx * dt
-        self.py += self.vy * dt
-        self.altitude += self.velocity * dt
+        self.vx += ((ax + self.prev_ax) / 2.0) * dt
+        self.vy += ((ay + self.prev_ay) / 2.0) * dt
+        self.velocity += ((az_corrected + self.prev_az_corrected) / 2.0) * dt
 
-        # Return the vertical state as per the original template requirements
+        self.px += ((self.vx + prev_vx) / 2.0) * dt
+        self.py += ((self.vy + prev_vy) / 2.0) * dt
+        self.altitude += ((self.velocity + prev_vz) / 2.0) * dt
+
+        self.prev_ax = ax
+        self.prev_ay = ay
+        self.prev_az_corrected = az_corrected
+
         return self.altitude, self.velocity
